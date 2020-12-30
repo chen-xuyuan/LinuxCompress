@@ -2,47 +2,55 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
+#include <sys/stat.h>
 
 char *mallocAndReset(size_t length)
 {
     char *p = (char*)malloc(length);
     if (!p)
     {
-        perror("no enough space to malloc");
+        perror("malloc error");
         exit(1);
     }
     memset(p,0,length);
     return p;
 }
 
-int tar(char *dirFile)
+int tar(char *path)
 {
-    DIR *dirPoint = opendir(dirFile);
-    if (!dirPoint)
+    struct stat statBuf;
+    if (stat(path,&statBuf))
     {
-        perror("open dir error");
-        exit(1);
+        perror("stat error");
+        return 1;
     }
-    char *dirPath = mallocAndReset(strlen(dirFile) + 2);
-    strcat(dirPath,dirFile);
-    strcat(dirPath,"/");
-    printf("%s\n",dirPath);
-    struct dirent *fileStat;
-    while(fileStat = readdir(dirPoint))
+    if (S_ISDIR(statBuf.st_mode))
     {
-        char *filePath = mallocAndReset(strlen(dirPath) + strlen(fileStat->d_name) + 1);
-        strcat(filePath,dirPath);
-        strcat(filePath,fileStat->d_name);
-        if (fileStat->d_type == DT_DIR && strcmp(".",fileStat->d_name) && strcmp("..",fileStat->d_name))
+        DIR * dirPoint = opendir(path);
+        if (!dirPoint)
         {
-            tar(filePath);
+            perror("open directory error");
+            return 1;
         }
-        else
+        struct dirent *dirSata;
+        while(dirSata = readdir(dirPoint))
         {
-            printf("%s\n",filePath);
+            if (!strcmp(".",dirSata->d_name) || !strcmp("..",dirSata->d_name)) continue;
+            char *nextPath = (char *)mallocAndReset(strlen(path) + strlen(dirSata->d_name) + 2);
+            strcat(nextPath,path);
+            if (strcmp("/",path)) strcat(nextPath,"/"); // if dir is "/" don't add /
+            strcat(nextPath,dirSata->d_name);
+            tar(nextPath);
+            free(nextPath);
         }
-        free(filePath);
+        printf("%s/\n",path);
+        closedir(dirPoint);
     }
+    else
+    {
+        printf("%s\n",path);
+    }
+    
     return 0;
 }
 
@@ -69,6 +77,7 @@ int uncompress()
 int main()
 {
     char path[] = "/home/ricksanchez/test";
+    if (path[strlen(path)-1] == '/' && strlen(path) > 1) path[strlen(path)-1] = '\0'; // if path end of '/' and path is not "/" or "."
     tar(path);
     return 0;
 }
