@@ -17,16 +17,16 @@ char *mallocAndReset(size_t length)
 
 int tar(char *dirFile)
 {
-    char *dirPath = mallocAndReset(strlen(dirFile) + 2);
-    strcat(dirPath,dirFile);
-    strcat(dirPath,"/");
-    printf("%s\n",dirPath);
-    DIR *dirPoint = opendir(dirPath);
+    DIR *dirPoint = opendir(dirFile);
     if (!dirPoint)
     {
         perror("open dir error");
         exit(1);
     }
+    char *dirPath = mallocAndReset(strlen(dirFile) + 2);
+    strcat(dirPath,dirFile);
+    strcat(dirPath,"/");
+    printf("%s\n",dirPath);
     struct dirent *fileStat;
     while(fileStat = readdir(dirPoint))
     {
