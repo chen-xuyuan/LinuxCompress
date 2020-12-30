@@ -15,8 +15,11 @@ char *mallocAndReset(size_t length)
     return p;
 }
 
-int tar(char *dirPath)
+int tar(char *dirFile)
 {
+    char *dirPath = mallocAndReset(strlen(dirFile) + 2);
+    strcat(dirPath,dirFile);
+    strcat(dirPath,"/");
     printf("%s\n",dirPath);
     DIR *dirPoint = opendir(dirPath);
     if (!dirPoint)
@@ -27,19 +30,18 @@ int tar(char *dirPath)
     struct dirent *fileStat;
     while(fileStat = readdir(dirPoint))
     {
-        char *nextPath = mallocAndReset(strlen(dirPath) + 2 + strlen(fileStat->d_name));
-        strcat(nextPath,dirPath);
-        strcat(nextPath,fileStat->d_name);
+        char *filePath = mallocAndReset(strlen(dirPath) + strlen(fileStat->d_name) + 1);
+        strcat(filePath,dirPath);
+        strcat(filePath,fileStat->d_name);
         if (fileStat->d_type == DT_DIR && strcmp(".",fileStat->d_name) && strcmp("..",fileStat->d_name))
         {
-            strcat(nextPath,"/");
-            tar(nextPath);
+            tar(filePath);
         }
         else
         {
-            printf("%s\n",nextPath);
+            printf("%s\n",filePath);
         }
-        free(nextPath);
+        free(filePath);
     }
     return 0;
 }
@@ -66,7 +68,7 @@ int uncompress()
 
 int main()
 {
-    char path[] = "/home/ricksanchez/test/";
+    char path[] = "/home/ricksanchez/test";
     tar(path);
     return 0;
 }
