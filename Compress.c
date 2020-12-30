@@ -4,14 +4,16 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define REGULAR    0
-#define NORMAL    '0'
-#define HARDLINK  '1'
-#define SYMLINK   '2'
-#define CHAR      '3'
-#define BLOCK     '4'
-#define DIRECTORY '5'
-#define FIFO      '6'
+#define REGULAR      0
+#define NORMAL      '0'
+#define HARDLINK    '1'
+#define SYMLINK     '2'
+#define CHAR        '3'
+#define BLOCK       '4'
+#define DIRECTORY   '5'
+#define FIFO        '6'
+#define LONGNAME    'L'
+#define SYMLINKLONG 'B'
 
 typedef union Record
 {
@@ -68,15 +70,25 @@ void countFrequency(Record *block)
     for (int i = 0;i<512;i++) Frequency[((char *)block)[i]]++;
 }
 
+void copyNByte(char *dest, char *src,int n)
+{
+    for (int i=0;i<n;i++) dest[i] = src[i];
+}
+
 void copyName(char *path,Record *block)
 {
-    char *content = (char *)block;
-    int copyLength = strlen(path) < 100 ? strlen(path) : 100;
-    for(int i=0;i<copyLength;i++) content[i] = path[i];
+    copyNByte((char *)block,path,strlen(path) < 100 ? strlen(path) : 100);
+}
+
+char *tarLengthToChar(long length)
+{
+    return NULL;
 }
 
 int tarLongName(char *path,FILE *fout)
 {
+    Record *block = (Record *)mallocAndReset(((strlen(path)+511)/512 + 1) * 512);
+    copyName("././@LongLink",block); // LongName lable
     return 0;
 }
 
