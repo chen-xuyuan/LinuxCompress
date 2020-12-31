@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
@@ -101,16 +102,16 @@ void printToFile(Record *block,FILE *fout)
 
 int calculateCheckSum(Record *block)
 {
-    char *content = (char *)block;
-    unsigned int sum = 256;
-    for (int i = 0;i < 148;i++) sum += content[i];
-    for (int i = 156;i < 512;i++) sum += content[i];
+    unsigned char *content = (unsigned char *)block;
+    unsigned int sum = 0;
+    for (int i = 0;i < 512;i++) sum += content[i];
     return sum;
 }
 
-int tarLongName(char *path,FILE *fout)
+int tarLongName(char *path,FILE *fout,char tarType)
 {
-    Record *block = (Record *)mallocAndReset(((strlen(path)+511)/512 + 1) * 512,0);
+    int blockNumber = 1 + (strlen(path)+511)/512;
+    Record *block = (Record *)mallocAndReset(blockNumber * 512,0);
 
     copyName("././@LongLink",block); // LongName lable
     copyNByte(block->mode,"0000644",8);
@@ -119,29 +120,50 @@ int tarLongName(char *path,FILE *fout)
 
     char *tarSize = numberToNChar(strlen(path)+1,12);
     copyNByte(block->size,tarSize,12);
+    free(tarSize);
 
     copyNByte(block->mtime,"00000000000",12);
+    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
+    copyNByte(&(block->link),&tarType,1);
+    copyNByte(block->ustar,"ustar  ",8);
+    copyNByte(block->owner,"root",5);
+    copyNByte(block->group,"root",5);
 
-    printToFile(block,fout);
+    int checkSum = calculateCheckSum(block);
+    char *checkSumChar = numberToNChar(checkSum,7);
+    copyNByte(block->check,checkSumChar,7);
+    free(checkSumChar);
+
+    copyNByte((char *)(block + 1),path,strlen(path));
+
+    for(int i = 0;i < blockNumber; i++)
+    {
+        countFrequency(block+i);
+        printToFile(block+i,fout);
+    }
+
+    free(block);
     return 0;
 }
 
 int tar(char *path,FILE *fout)
 {
     struct stat statBuf;
-    if (stat(path,&statBuf))
+    if (lstat(path,&statBuf))
     {
-        perror("stat error");
+        printf("%s",path);
+        perror(" stat error");
         return 1;
     }
     if (S_ISDIR(statBuf.st_mode))
     {
-        if (strlen(path) + 2 > 100)
+        char *dirPath = (char *)mallocAndReset(strlen(path)+2,0);
+        strcat(dirPath,path);
+        strcat(dirPath,"/");
+        printf("%s\n",dirPath);
+        if (strlen(dirPath) > 100)
         {
-            char *dirPath = (char *)malloc(strlen(path)+2);
-            strcat(dirPath,path);
-            strcat(dirPath,"/");
-            tarLongName(dirPath,fout);
+            tarLongName(dirPath,fout,LONGNAME);
         }
         DIR * dirPoint = opendir(path);
         if (!dirPoint)
@@ -160,12 +182,11 @@ int tar(char *path,FILE *fout)
             tar(nextPath,fout);
             free(nextPath);
         }
-        printf("%s/\n",path);
         closedir(dirPoint);
     }
     else
     {
-        if (strlen(path) + 1 > 100) tarLongName(path,fout);
+        if (strlen(path) > 100) tarLongName(path,fout,LONGNAME);
         printf("%s\n",path);
     }
     
@@ -210,8 +231,5 @@ int main()
 
     fclose(fout);
 
-    char * test = numberToNChar(262,12);
-    printf("%s\n",test);
-    free(test);
     return 0;
 }
