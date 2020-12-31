@@ -13,7 +13,7 @@
 #define DIRECTORY   '5'
 #define FIFO        '6'
 #define LONGNAME    'L'
-#define SYMLINKLONG 'B'
+#define SYMLINKLONG 'K'
 
 typedef union Record
 {
@@ -80,9 +80,17 @@ void copyName(char *path,Record *block)
     copyNByte((char *)block,path,strlen(path) < 100 ? strlen(path) : 100);
 }
 
-char *tarLengthToChar(long length)
+char *numberToNChar(long number,int n)
 {
-    return NULL;
+    char *temp = (char *)mallocAndReset(n);
+    int i = n-2;
+    while(i>=0)
+    {
+        temp[i] = '0' + (number & 0x7);
+        number = number >> 3;
+        i--;
+    }
+    return temp;
 }
 
 int tarLongName(char *path,FILE *fout)
@@ -102,7 +110,7 @@ int tar(char *path,FILE *fout)
     }
     if (S_ISDIR(statBuf.st_mode))
     {
-        if (strlen(path) + 1 > 100)
+        if (strlen(path) + 2 > 100)
         {
             char *dirPath = (char *)malloc(strlen(path)+2);
             strcat(dirPath,path);
@@ -131,7 +139,7 @@ int tar(char *path,FILE *fout)
     }
     else
     {
-        if (strlen(path) > 100) tarLongName(path,fout);
+        if (strlen(path) + 1 > 100) tarLongName(path,fout);
         printf("%s\n",path);
     }
     
@@ -175,5 +183,8 @@ int main()
     tar(path,fout);
 
     fclose(fout);
+
+    char * test = numberToNChar(262,12);
+    printf("%s\n",test);
     return 0;
 }
