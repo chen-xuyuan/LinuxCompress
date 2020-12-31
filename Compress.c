@@ -298,14 +298,15 @@ int tar(char *path,FILE *fout)
             }
 
             char *content = (char *)block;
+            int ch;
 
             for (int i = 0;i < blockNumber; i++)
             {
                 memset(block,0,512);
                 for (int i = 0;i<512;i++)
                 {
-                    content[i] = fgetc(fin);
-                    if (feof(fin)) break;
+                    if (( ch= fgetc(fin) ) != EOF) content[i] = ch;
+                    else break;
                 }
                 printOneBlock(block,fout);
             }
