@@ -148,11 +148,6 @@ int tarLongName(char *path,FILE *fout,char tarType)
     return 0;
 }
 
-void tarMode(mode_t st_mode,Record* block)
-{
-    block->mode[3] = st_mode & S_IRWXG;
-}
-
 int tar(char *path,FILE *fout)
 {
     struct stat statBuf;
@@ -248,6 +243,7 @@ int tar(char *path,FILE *fout)
             free(nextPath);
         }
         closedir(dirPoint);
+        free(dirPath);
     }
     else
     {
