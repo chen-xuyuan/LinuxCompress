@@ -53,7 +53,7 @@ typedef union Record
 
 int Frequency[256] = {0};
 
-char *mallocAndReset(size_t length)
+char *mallocAndReset(size_t length,int n)
 {
     char *p = (char*)malloc(length);
     if (!p)
@@ -61,7 +61,7 @@ char *mallocAndReset(size_t length)
         perror("malloc error");
         exit(1);
     }
-    memset(p,0,length);
+    memset(p,n,length);
     return p;
 }
 
@@ -82,7 +82,7 @@ void copyName(char *path,Record *block)
 
 char *numberToNChar(long number,int n)
 {
-    char *temp = (char *)mallocAndReset(n);
+    char *temp = (char *)mallocAndReset(n,0);
     int i = n-2;
     while(i>=0)
     {
@@ -93,10 +93,36 @@ char *numberToNChar(long number,int n)
     return temp;
 }
 
+void printToFile(Record *block,FILE *fout)
+{
+    char *p = (char *)block;
+    for (int i = 0;i<512;i++) fprintf(fout,"%c",p[i]);
+}
+
+int calculateCheckSum(Record *block)
+{
+    char *content = (char *)block;
+    unsigned int sum = 256;
+    for (int i = 0;i < 148;i++) sum += content[i];
+    for (int i = 156;i < 512;i++) sum += content[i];
+    return sum;
+}
+
 int tarLongName(char *path,FILE *fout)
 {
-    Record *block = (Record *)mallocAndReset(((strlen(path)+511)/512 + 1) * 512);
+    Record *block = (Record *)mallocAndReset(((strlen(path)+511)/512 + 1) * 512,0);
+
     copyName("././@LongLink",block); // LongName lable
+    copyNByte(block->mode,"0000644",8);
+    copyNByte(block->uid,"0000000",8);
+    copyNByte(block->gid,"0000000",8);
+
+    char *tarSize = numberToNChar(strlen(path)+1,12);
+    copyNByte(block->size,tarSize,12);
+
+    copyNByte(block->mtime,"00000000000",12);
+
+    printToFile(block,fout);
     return 0;
 }
 
@@ -127,7 +153,7 @@ int tar(char *path,FILE *fout)
         while(dirSata = readdir(dirPoint))
         {
             if (!strcmp(".",dirSata->d_name) || !strcmp("..",dirSata->d_name)) continue;
-            char *nextPath = (char *)mallocAndReset(strlen(path) + strlen(dirSata->d_name) + 2);
+            char *nextPath = (char *)mallocAndReset(strlen(path) + strlen(dirSata->d_name) + 2,0);
             strcat(nextPath,path);
             if (strcmp("/",path)) strcat(nextPath,"/"); // if dir is "/" don't add /
             strcat(nextPath,dirSata->d_name);
@@ -186,5 +212,6 @@ int main()
 
     char * test = numberToNChar(262,12);
     printf("%s\n",test);
+    free(test);
     return 0;
 }
