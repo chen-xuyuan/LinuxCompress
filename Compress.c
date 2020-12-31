@@ -349,6 +349,10 @@ int main()
 
     tar(path, fout);
 
+    Record* lastRecord = (Record*)mallocAndReset(512, 0);
+    printOneBlock(lastRecord, fout);
+    free(lastRecord);
+
     fclose(fout);
 
     return 0;
