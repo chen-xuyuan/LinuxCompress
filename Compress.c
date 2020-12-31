@@ -181,9 +181,9 @@ int tar(char *path,FILE *fout)
     free(tarUID);
     free(tarGID);
 
-    char *tarMTime = numberToNChar(statBuf.st_mtim,12);
+    // char *tarMTime = numberToNChar(statBuf.st_mtim,12);
     copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
-    
+
     if (S_ISREG(statBuf.st_mode)) block->type = NORMAL;
     else if (S_ISDIR(statBuf.st_mode)) block->type = DIRECTORY;
     else if (S_ISCHR(statBuf.st_mode)) block->type = CHAR;
