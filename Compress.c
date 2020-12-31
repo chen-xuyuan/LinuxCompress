@@ -14,7 +14,7 @@
 #define DIRECTORY   '5'
 #define FIFO        '6'
 #define LONGNAME    'L'
-#define SYMLINKLONG 'K'
+#define LINKLONG    'K'
 
 typedef union Record
 {
@@ -76,9 +76,14 @@ void copyNByte(char *dest, char *src,int n)
     for (int i=0;i<n;i++) dest[i] = src[i];
 }
 
-void copyName(char *path,Record *block)
+void copySrcName(char *path,Record *block)
 {
-    copyNByte((char *)block,path,strlen(path) < 100 ? strlen(path) : 100);
+    copyNByte(block->name,path,strlen(path) < 100 ? strlen(path) : 100);
+}
+
+void copyLinkName(char *path,Record *block)
+{
+    copyNByte(block->link_name,path,strlen(path) < 100 ? strlen(path) : 100);
 }
 
 char *numberToNChar(long number,int n)
@@ -113,7 +118,7 @@ int tarLongName(char *path,FILE *fout,char tarType)
     int blockNumber = 1 + (strlen(path)+511)/512;
     Record *block = (Record *)mallocAndReset(blockNumber * 512,0);
 
-    copyName("././@LongLink",block); // LongName lable
+    copySrcName("././@LongLink",block); // LongName lable
     copyNByte(block->mode,"0000644",8);
     copyNByte(block->uid,"0000000",8);
     copyNByte(block->gid,"0000000",8);
@@ -124,7 +129,7 @@ int tarLongName(char *path,FILE *fout,char tarType)
 
     copyNByte(block->mtime,"00000000000",12);
     copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
-    copyNByte(&(block->link),&tarType,1);
+    block->type = tarType;
     copyNByte(block->ustar,"ustar  ",8);
     copyNByte(block->owner,"root",5);
     copyNByte(block->group,"root",5);
@@ -146,6 +151,11 @@ int tarLongName(char *path,FILE *fout,char tarType)
     return 0;
 }
 
+void tarMode(mode_t st_mode,Record* block)
+{
+    block->mode[3] = st_mode & S_IRWXG;
+}
+
 int tar(char *path,FILE *fout)
 {
     struct stat statBuf;
@@ -155,20 +165,57 @@ int tar(char *path,FILE *fout)
         perror(" stat error");
         return 1;
     }
+
+    int blockNumber = 1 + (statBuf.st_size+511)/512;
+    Record *block = (Record *)mallocAndReset(blockNumber * 512,0);
+
+    block->mode[3] = (007000 & statBuf.st_mode) >> 9;
+    block->mode[4] = (000700 & statBuf.st_mode) >> 6;
+    block->mode[5] = (000070 & statBuf.st_mode) >> 3;
+    block->mode[6] = (000007 & statBuf.st_mode);
+
+    char *tarUID = numberToNChar(statBuf.st_uid,8);
+    char *tarGID = numberToNChar(statBuf.st_gid,8);
+    copyNByte(block->uid,tarUID,8);
+    copyNByte(block->gid,tarGID,8);
+    free(tarUID);
+    free(tarGID);
+
+    char *tarMTime = numberToNChar(statBuf.st_mtim,12);
+    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
+    
+    if (S_ISREG(statBuf.st_mode)) block->type = NORMAL;
+    else if (S_ISDIR(statBuf.st_mode)) block->type = DIRECTORY;
+    else if (S_ISCHR(statBuf.st_mode)) block->type = CHAR;
+    else if (S_ISFIFO(statBuf.st_mode)) block->type = FIFO;
+    else if (S_ISBLK(statBuf.st_mode)) block->type = BLOCK;
+
+    copyNByte(block->mtime,"00000000000",12);
+    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
+    block->type = "L";
+    copyNByte(block->ustar,"ustar  ",8);
+    copyNByte(block->owner,"root",5);
+    copyNByte(block->group,"root",5);
+
     if (S_ISDIR(statBuf.st_mode))
     {
         char *dirPath = (char *)mallocAndReset(strlen(path)+2,0);
         strcat(dirPath,path);
         strcat(dirPath,"/");
+
         printf("%s\n",dirPath);
         if (strlen(dirPath) > 100)
         {
             tarLongName(dirPath,fout,LONGNAME);
         }
-        DIR * dirPoint = opendir(path);
+
+        copySrcName(block->name,block);
+        
+        DIR * dirPoint = opendir(dirPath);
         if (!dirPoint)
         {
-            perror("open directory error");
+            printf("%s",dirPath);
+            perror(" open directory error");
             return 1;
         }
         struct dirent *dirSata;
@@ -187,9 +234,20 @@ int tar(char *path,FILE *fout)
     else
     {
         if (strlen(path) > 100) tarLongName(path,fout,LONGNAME);
+
+        copySrcName(path,block);
+
+        if (!(S_ISLNK(statBuf.st_mode)))
+        {
+            char *tarSize = numberToNChar(statBuf.st_size,12);
+            copyNByte(block->size,tarSize,12);
+            free(tarSize);
+        }
+
         printf("%s\n",path);
     }
     
+    free(block);
     return 0;
 }
 
