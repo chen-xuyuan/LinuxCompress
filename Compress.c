@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <pwd.h>
+#include <grp.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
@@ -66,11 +68,6 @@ char *mallocAndReset(size_t length,int n)
     return p;
 }
 
-void countFrequency(Record *block)
-{
-    for (int i = 0;i<512;i++) Frequency[((char *)block)[i]]++;
-}
-
 void copyNByte(char *dest, char *src,int n)
 {
     for (int i=0;i<n;i++) dest[i] = src[i];
@@ -99,10 +96,14 @@ char *numberToNChar(long number,int n)
     return temp;
 }
 
-void printToFile(Record *block,FILE *fout)
+void printOneBlock(Record *block,FILE *fout)
 {
     char *p = (char *)block;
-    for (int i = 0;i<512;i++) fprintf(fout,"%c",p[i]);
+    for (int i = 0;i<512;i++)
+    {
+        Frequency[p[i]]++;
+        fprintf(fout,"%c",p[i]);
+    }
 }
 
 int calculateCheckSum(Record *block)
@@ -141,11 +142,7 @@ int tarLongName(char *path,FILE *fout,char tarType)
 
     copyNByte((char *)(block + 1),path,strlen(path));
 
-    for(int i = 0;i < blockNumber; i++)
-    {
-        countFrequency(block+i);
-        printToFile(block+i,fout);
-    }
+    for(int i = 0;i < blockNumber; i++) printOneBlock(block+i,fout);
 
     free(block);
     return 0;
@@ -166,13 +163,16 @@ int tar(char *path,FILE *fout)
         return 1;
     }
 
-    int blockNumber = 1 + (statBuf.st_size+511)/512;
-    Record *block = (Record *)mallocAndReset(blockNumber * 512,0);
+    Record *block = (Record *)mallocAndReset(512,0);
 
-    block->mode[3] = (007000 & statBuf.st_mode) >> 9;
-    block->mode[4] = (000700 & statBuf.st_mode) >> 6;
-    block->mode[5] = (000070 & statBuf.st_mode) >> 3;
-    block->mode[6] = (000007 & statBuf.st_mode);
+    copyNByte(block->mode,"0000000",8);
+    copyNByte(block->uid,"0000000",8);
+    copyNByte(block->gid,"0000000",8);
+
+    block->mode[3] = ((007000 & statBuf.st_mode) >> 9) + '0';
+    block->mode[4] = ((000700 & statBuf.st_mode) >> 6) + '0';
+    block->mode[5] = ((000070 & statBuf.st_mode) >> 3) + '0';
+    block->mode[6] = (000007 & statBuf.st_mode) + '0';
 
     char *tarUID = numberToNChar(statBuf.st_uid,8);
     char *tarGID = numberToNChar(statBuf.st_gid,8);
@@ -181,20 +181,28 @@ int tar(char *path,FILE *fout)
     free(tarUID);
     free(tarGID);
 
-    // char *tarMTime = numberToNChar(statBuf.st_mtim,12);
-    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
+    char *tarMTime = numberToNChar(statBuf.st_mtime,12);
+    copyNByte(block->mtime,tarMTime,12);
+    free(tarMTime);
 
+    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
+    
     if (S_ISREG(statBuf.st_mode)) block->type = NORMAL;
     else if (S_ISDIR(statBuf.st_mode)) block->type = DIRECTORY;
     else if (S_ISCHR(statBuf.st_mode)) block->type = CHAR;
-    else if (S_ISFIFO(statBuf.st_mode)) block->type = FIFO;
     else if (S_ISBLK(statBuf.st_mode)) block->type = BLOCK;
+    else if (S_ISLNK(statBuf.st_mode)) block->type = SYMLINK;
+    else if (S_ISFIFO(statBuf.st_mode)) block->type = FIFO;
 
-    copyNByte(block->mtime,"00000000000",12);
-    copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
     copyNByte(block->ustar,"ustar  ",8);
-    copyNByte(block->owner,"root",5);
-    copyNByte(block->group,"root",5);
+
+    struct passwd *userInfo;
+    userInfo = getpwuid(statBuf.st_uid);
+    copyNByte(block->owner,userInfo->pw_name,strlen(userInfo->pw_name));
+
+    struct group *groupInfo;
+    groupInfo = getgrgid(statBuf.st_gid);
+    copyNByte(block->group,groupInfo->gr_name,strlen(groupInfo->gr_name));
 
     if (S_ISDIR(statBuf.st_mode))
     {
@@ -202,14 +210,25 @@ int tar(char *path,FILE *fout)
         strcat(dirPath,path);
         strcat(dirPath,"/");
 
-        printf("%s\n",dirPath);
+        // printf("%s\n",dirPath);
         if (strlen(dirPath) > 100)
         {
             tarLongName(dirPath,fout,LONGNAME);
         }
 
-        copySrcName(block->name,block);
-        
+        copySrcName(dirPath,block);
+
+        char *tarSize = numberToNChar(0,12);
+        copyNByte(block->size,tarSize,12);
+        free(tarSize);
+
+        int checkSum = calculateCheckSum(block);
+        char *checkSumChar = numberToNChar(checkSum,7);
+        copyNByte(block->check,checkSumChar,7);
+        free(checkSumChar);
+
+        printOneBlock(block,fout);
+
         DIR * dirPoint = opendir(dirPath);
         if (!dirPoint)
         {
@@ -232,18 +251,65 @@ int tar(char *path,FILE *fout)
     }
     else
     {
+        char *tarSize;
+        if (S_ISLNK(statBuf.st_mode))
+        {
+            char *linkPath = (char *)mallocAndReset(5000,0);
+            if (-1 == readlink(path,linkPath,5000))
+            {
+                printf("%s",path);
+                perror(" readlink error");
+                return 1;
+            }
+            if (strlen(linkPath) > 100) tarLongName(linkPath,fout,LINKLONG);
+            copyLinkName(linkPath,block);
+            free(linkPath);
+            tarSize = numberToNChar(0,12);
+        }
+        else
+        {
+            tarSize = numberToNChar(statBuf.st_size,12);
+        }
+
+        copyNByte(block->size,tarSize,12);
+        free(tarSize);
+
         if (strlen(path) > 100) tarLongName(path,fout,LONGNAME);
 
         copySrcName(path,block);
 
+        int checkSum = calculateCheckSum(block);
+        char *checkSumChar = numberToNChar(checkSum,7);
+        copyNByte(block->check,checkSumChar,7);
+        free(checkSumChar);
+
+        printOneBlock(block,fout);
+
         if (!(S_ISLNK(statBuf.st_mode)))
         {
-            char *tarSize = numberToNChar(statBuf.st_size,12);
-            copyNByte(block->size,tarSize,12);
-            free(tarSize);
-        }
+            int blockNumber = (statBuf.st_size + 511) / 512;
 
-        printf("%s\n",path);
+            FILE *fin = fopen(path,"rb");
+
+            if (!fin)
+            {
+                perror("fopen");
+                return 1;
+            }
+
+            char *content = (char *)block;
+
+            for (int i = 0;i < blockNumber; i++)
+            {
+                memset(block,0,512);
+                for (int i = 0;i<512;i++)
+                {
+                    content[i] = fgetc(fin);
+                    if (feof(fin)) break;
+                }
+                printOneBlock(block,fout);
+            }
+        }
     }
     
     free(block);
