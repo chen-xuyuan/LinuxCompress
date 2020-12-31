@@ -192,7 +192,6 @@ int tar(char *path,FILE *fout)
 
     copyNByte(block->mtime,"00000000000",12);
     copyNByte(block->check,"\x20\x20\x20\x20\x20\x20\x20\x20",8);
-    block->type = "L";
     copyNByte(block->ustar,"ustar  ",8);
     copyNByte(block->owner,"root",5);
     copyNByte(block->group,"root",5);
