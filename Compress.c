@@ -227,11 +227,11 @@ int tar(char* path, FILE* fout)
 
     copyNByte(block->ustar, "ustar  ", 8);
 
-    struct passwd* userInfo;
+    struct passwd* userInfo = NULL;
     userInfo = getpwuid(statBuf.st_uid);
     copyNByte(block->owner, userInfo->pw_name, strlen(userInfo->pw_name));
 
-    struct group* groupInfo;
+    struct group* groupInfo = NULL;
     groupInfo = getgrgid(statBuf.st_gid);
     copyNByte(block->group, groupInfo->gr_name, strlen(groupInfo->gr_name));
 
@@ -287,7 +287,7 @@ int tar(char* path, FILE* fout)
     }
     else
     {
-        char* tarSize;
+        char* tarSize = NULL;
         if (S_ISLNK(statBuf.st_mode))
         {
             char* linkPath = (char*)mallocAndReset(5000, 0);
@@ -307,7 +307,7 @@ int tar(char* path, FILE* fout)
             tarSize = numberToNChar(statBuf.st_size, 12);
         }
 
-        char* hardLinkPath;
+        char* hardLinkPath = NULL;
         if (statBuf.st_nlink > 1)
         {
             if (path[0] == '/') hardLinkPath = findAndAddINode(statBuf.st_ino, path + 1);
