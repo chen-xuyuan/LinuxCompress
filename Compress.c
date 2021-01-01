@@ -54,12 +54,14 @@ typedef union record
     char block[512]; // raw memory (padded to 1 block)
 }Record;
 
-typedef struct node
+typedef struct inode
 {
-    u_int64_t offset;
-    u_int64_t size;
-    struct node *child,*brother;
-} Node;
+    u_int64_t inode;
+    char *path;
+    struct inode *next;
+} iNode;
+
+iNode iNodeHead;
 
 long long int Frequency[256] = { 0 };
 
@@ -78,6 +80,35 @@ char* mallocAndReset(size_t length, int n)
 void copyNByte(char* dest, char* src, int n)
 {
     for (int i = 0; i < n; i++) dest[i] = src[i];
+}
+
+char *findAndAddINode(u_int64_t inode,char *path)
+{
+    iNode *p = &iNodeHead;
+    for (u_int64_t i = 0;i<iNodeHead.inode;i++)
+    {
+        p = p->next;
+        if (p->inode == inode) return p->path;
+    }
+    iNode *temp = (iNode *)mallocAndReset(sizeof(iNode),0);
+    temp->inode = inode;
+    temp->path = (char *)mallocAndReset(strlen(path)+1,0);
+    copyNByte(temp->path,path,strlen(path));
+    p->next = temp;
+    iNodeHead.inode++;
+    return NULL;
+}
+
+void freeINode()
+{
+    for (u_int64_t i = 0;i < iNodeHead.inode;i++)
+    {
+        iNode *temp = iNodeHead.next;
+        iNodeHead.next = temp->next;
+        free(temp->path);
+        free(temp);
+    }
+    iNodeHead.inode = 0;
 }
 
 void copySrcName(char* path, Record* block)
@@ -103,6 +134,14 @@ char* numberToNChar(long number, int n)
     return temp;
 }
 
+int calculateCheckSum(Record* block)
+{
+    unsigned char* content = (unsigned char*)block;
+    unsigned int sum = 0;
+    for (int i = 0; i < 512; i++) sum += content[i];
+    return sum;
+}
+
 void printOneBlock(Record* block, FILE* fout)
 {
     char* p = (char*)block;
@@ -111,14 +150,6 @@ void printOneBlock(Record* block, FILE* fout)
         Frequency[p[i]]++;
         fprintf(fout, "%c", p[i]);
     }
-}
-
-int calculateCheckSum(Record* block)
-{
-    unsigned char* content = (unsigned char*)block;
-    unsigned int sum = 0;
-    for (int i = 0; i < 512; i++) sum += content[i];
-    return sum;
 }
 
 int tarLongName(char* path, FILE* fout, char tarType)
@@ -276,6 +307,20 @@ int tar(char* path, FILE* fout)
             tarSize = numberToNChar(statBuf.st_size, 12);
         }
 
+        char *hardLinkPath;
+        if (statBuf.st_nlink > 1)
+        {
+            if (path[0] == '/') hardLinkPath = findAndAddINode(statBuf.st_ino,path + 1);
+            else hardLinkPath = findAndAddINode(statBuf.st_ino,path);
+            if (hardLinkPath)
+            {
+                block->type = HARDLINK;
+                if (strlen(hardLinkPath) > 100) tarLongName(hardLinkPath, fout, LINKLONG);
+                copyLinkName(hardLinkPath, block);
+                tarSize = numberToNChar(0, 12);
+            }
+        }
+
         copyNByte(block->size, tarSize, 12);
         free(tarSize);
 
@@ -297,7 +342,7 @@ int tar(char* path, FILE* fout)
 
         printOneBlock(block, fout);
 
-        if (!(S_ISLNK(statBuf.st_mode)))
+        if (!(S_ISLNK(statBuf.st_mode)) && !hardLinkPath)
         {
             int blockNumber = (statBuf.st_size + 511) / 512;
 
@@ -351,6 +396,8 @@ int uncompress()
 
 int main()
 {
+    memset(&iNodeHead,0,sizeof(iNode));
+
     char path[] = "/home/ricksanchez/test";
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
 
@@ -370,6 +417,8 @@ int main()
     free(lastRecord);
 
     fclose(fout);
+
+    freeINode();
 
     return 0;
 }
