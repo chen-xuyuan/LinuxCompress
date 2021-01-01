@@ -165,8 +165,6 @@ int tar(char* path, FILE* fout)
         return 1;
     }
 
-    statBuf.st_ino;
-
     Record* block = (Record*)mallocAndReset(512, 0);
 
     copyNByte(block->mode, "0000000", 8);
