@@ -18,7 +18,7 @@
 #define LONGNAME    'L'
 #define LINKLONG    'K'
 
-typedef union Record
+typedef union record
 {
     union
     {
@@ -54,7 +54,14 @@ typedef union Record
     char block[512]; // raw memory (padded to 1 block)
 }Record;
 
-int Frequency[256] = { 0 };
+typedef struct node
+{
+    u_int64_t offset;
+    u_int64_t size;
+    struct node *child,*brother;
+} Node;
+
+long long int Frequency[256] = { 0 };
 
 char* mallocAndReset(size_t length, int n)
 {
@@ -158,11 +165,11 @@ int tar(char* path, FILE* fout)
         return 1;
     }
 
+    statBuf.st_ino;
+
     Record* block = (Record*)mallocAndReset(512, 0);
 
     copyNByte(block->mode, "0000000", 8);
-    copyNByte(block->uid, "0000000", 8);
-    copyNByte(block->gid, "0000000", 8);
 
     block->mode[3] = ((007000 & statBuf.st_mode) >> 9) + '0';
     block->mode[4] = ((000700 & statBuf.st_mode) >> 6) + '0';
@@ -201,33 +208,38 @@ int tar(char* path, FILE* fout)
 
     if (S_ISDIR(statBuf.st_mode))
     {
-        char* dirPath = (char*)mallocAndReset(strlen(path) + 2, 0);
-        strcat(dirPath, path);
-        strcat(dirPath, "/");
-
-        // printf("%s\n",dirPath);
-        if (strlen(dirPath) > 100)
+        if (strcmp("/",path))
         {
-            tarLongName(dirPath, fout, LONGNAME);
+            char *dirPath = (char*)mallocAndReset(strlen(path) + 2, 0);
+            if (path[0] == '/') strcat(dirPath, path + 1);
+            else strcat(dirPath, path);
+            strcat(dirPath, "/");
+
+            if (strlen(dirPath) > 100)
+            {
+                tarLongName(dirPath, fout, LONGNAME);
+            }
+
+            copySrcName(dirPath, block);
+
+            char* tarSize = numberToNChar(0, 12);
+            copyNByte(block->size, tarSize, 12);
+            free(tarSize);
+
+            int checkSum = calculateCheckSum(block);
+            char* checkSumChar = numberToNChar(checkSum, 7);
+            copyNByte(block->check, checkSumChar, 7);
+            free(checkSumChar);
+
+            printOneBlock(block, fout);
+
+            free(dirPath);
         }
 
-        copySrcName(dirPath, block);
-
-        char* tarSize = numberToNChar(0, 12);
-        copyNByte(block->size, tarSize, 12);
-        free(tarSize);
-
-        int checkSum = calculateCheckSum(block);
-        char* checkSumChar = numberToNChar(checkSum, 7);
-        copyNByte(block->check, checkSumChar, 7);
-        free(checkSumChar);
-
-        printOneBlock(block, fout);
-
-        DIR* dirPoint = opendir(dirPath);
+        DIR* dirPoint = opendir(path);
         if (!dirPoint)
         {
-            printf("%s", dirPath);
+            printf("%s", path);
             perror(" open directory error");
             return 1;
         }
@@ -243,7 +255,6 @@ int tar(char* path, FILE* fout)
             free(nextPath);
         }
         closedir(dirPoint);
-        free(dirPath);
     }
     else
     {
@@ -270,10 +281,17 @@ int tar(char* path, FILE* fout)
         copyNByte(block->size, tarSize, 12);
         free(tarSize);
 
-        if (strlen(path) > 100) tarLongName(path, fout, LONGNAME);
-
-        copySrcName(path, block);
-
+        if (path[0] == '/')
+        {
+            if (strlen(path+1) > 100) tarLongName(path + 1, fout, LONGNAME);
+            copySrcName(path + 1, block);
+        }
+        else
+        {
+            if (strlen(path) > 100) tarLongName(path, fout, LONGNAME);
+            copySrcName(path, block);
+        }
+        
         int checkSum = calculateCheckSum(block);
         char* checkSumChar = numberToNChar(checkSum, 7);
         copyNByte(block->check, checkSumChar, 7);
@@ -336,7 +354,7 @@ int uncompress()
 int main()
 {
     char path[] = "/home/ricksanchez/test";
-    char tarPath[] = "/home/ricksanchez/test.tar";
+    char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
 
     if (path[strlen(path) - 1] == '/' && strlen(path) > 1) path[strlen(path) - 1] = '\0'; // if path end of '/' and path is not "/" or "."
 
@@ -350,7 +368,7 @@ int main()
     tar(path, fout);
 
     Record* lastRecord = (Record*)mallocAndReset(512, 0);
-    printOneBlock(lastRecord, fout);
+    for (int i = 0; i < 2;i++) printOneBlock(lastRecord, fout);
     free(lastRecord);
 
     fclose(fout);
