@@ -57,8 +57,8 @@ typedef union record
 typedef struct inode
 {
     u_int64_t inode;
-    char *path;
-    struct inode *next;
+    char* path;
+    struct inode* next;
 } iNode;
 
 iNode iNodeHead;
@@ -82,18 +82,18 @@ void copyNByte(char* dest, char* src, int n)
     for (int i = 0; i < n; i++) dest[i] = src[i];
 }
 
-char *findAndAddINode(u_int64_t inode,char *path)
+char* findAndAddINode(u_int64_t inode, char* path)
 {
-    iNode *p = &iNodeHead;
-    for (u_int64_t i = 0;i<iNodeHead.inode;i++)
+    iNode* p = &iNodeHead;
+    for (u_int64_t i = 0; i < iNodeHead.inode; i++)
     {
         p = p->next;
         if (p->inode == inode) return p->path;
     }
-    iNode *temp = (iNode *)mallocAndReset(sizeof(iNode),0);
+    iNode* temp = (iNode*)mallocAndReset(sizeof(iNode), 0);
     temp->inode = inode;
-    temp->path = (char *)mallocAndReset(strlen(path)+1,0);
-    copyNByte(temp->path,path,strlen(path));
+    temp->path = (char*)mallocAndReset(strlen(path) + 1, 0);
+    copyNByte(temp->path, path, strlen(path));
     p->next = temp;
     iNodeHead.inode++;
     return NULL;
@@ -101,9 +101,9 @@ char *findAndAddINode(u_int64_t inode,char *path)
 
 void freeINode()
 {
-    for (u_int64_t i = 0;i < iNodeHead.inode;i++)
+    for (u_int64_t i = 0; i < iNodeHead.inode; i++)
     {
-        iNode *temp = iNodeHead.next;
+        iNode* temp = iNodeHead.next;
         iNodeHead.next = temp->next;
         free(temp->path);
         free(temp);
@@ -237,9 +237,9 @@ int tar(char* path, FILE* fout)
 
     if (S_ISDIR(statBuf.st_mode))
     {
-        if (strcmp("/",path))
+        if (strcmp("/", path))
         {
-            char *dirPath = (char*)mallocAndReset(strlen(path) + 2, 0);
+            char* dirPath = (char*)mallocAndReset(strlen(path) + 2, 0);
             if (path[0] == '/') strcat(dirPath, path + 1);
             else strcat(dirPath, path);
             strcat(dirPath, "/");
@@ -307,11 +307,11 @@ int tar(char* path, FILE* fout)
             tarSize = numberToNChar(statBuf.st_size, 12);
         }
 
-        char *hardLinkPath;
+        char* hardLinkPath;
         if (statBuf.st_nlink > 1)
         {
-            if (path[0] == '/') hardLinkPath = findAndAddINode(statBuf.st_ino,path + 1);
-            else hardLinkPath = findAndAddINode(statBuf.st_ino,path);
+            if (path[0] == '/') hardLinkPath = findAndAddINode(statBuf.st_ino, path + 1);
+            else hardLinkPath = findAndAddINode(statBuf.st_ino, path);
             if (hardLinkPath)
             {
                 block->type = HARDLINK;
@@ -326,7 +326,7 @@ int tar(char* path, FILE* fout)
 
         if (path[0] == '/')
         {
-            if (strlen(path+1) > 100) tarLongName(path + 1, fout, LONGNAME);
+            if (strlen(path + 1) > 100) tarLongName(path + 1, fout, LONGNAME);
             copySrcName(path + 1, block);
         }
         else
@@ -334,7 +334,7 @@ int tar(char* path, FILE* fout)
             if (strlen(path) > 100) tarLongName(path, fout, LONGNAME);
             copySrcName(path, block);
         }
-        
+
         int checkSum = calculateCheckSum(block);
         char* checkSumChar = numberToNChar(checkSum, 7);
         copyNByte(block->check, checkSumChar, 7);
@@ -396,7 +396,7 @@ int uncompress()
 
 int main()
 {
-    memset(&iNodeHead,0,sizeof(iNode));
+    memset(&iNodeHead, 0, sizeof(iNode));
 
     char path[] = "/home/ricksanchez/test";
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
@@ -413,7 +413,7 @@ int main()
     tar(path, fout);
 
     Record* lastRecord = (Record*)mallocAndReset(512, 0);
-    for (int i = 0; i < 2;i++) printOneBlock(lastRecord, fout);
+    for (int i = 0; i < 2; i++) printOneBlock(lastRecord, fout);
     free(lastRecord);
 
     fclose(fout);
