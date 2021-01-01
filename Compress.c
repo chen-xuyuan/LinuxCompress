@@ -61,9 +61,33 @@ typedef struct inode
     struct inode* next;
 } iNode;
 
+typedef struct huffmannode
+{
+    int ch;
+    struct huffmannode *left;
+    struct huffmannode *right;
+} huffmanNode;
+
+typedef struct linknode
+{
+    u_int64_t frequency;
+    huffmanNode *node;
+    struct linknode *next;
+} linkNode;
+
+typedef struct huffmanitem
+{
+    char length;
+    char huffmanCode;
+} huffmanItem;
+
 iNode iNodeHead;
 
-long long int Frequency[256] = { 0 };
+linkNode linkNodeHead;
+
+u_int64_t Frequency[256] = { 0 };
+
+huffmanItem huffmanTable[256];
 
 char* mallocAndReset(size_t length, int n)
 {
@@ -109,6 +133,43 @@ void freeINode()
         free(temp);
     }
     iNodeHead.inode = 0;
+}
+
+int addLinkNode(linkNode *tempNode)
+{
+    linkNode *pre= &linkNodeHead;
+    linkNode *p = pre->next;
+    for (int i = 0;i < linkNodeHead.frequency;i++)
+    {
+        if (tempNode->frequency<p->frequency)
+        {
+            pre->next = tempNode;
+            tempNode->next = p;
+            linkNodeHead.frequency++;
+            return 0;
+        }
+        pre = pre->next;
+        p = pre->next;
+    }
+    tempNode->next = p;
+    pre->next = tempNode;
+    linkNodeHead.frequency++;
+    return 0;
+}
+
+int generateHuffmanCode(huffmanNode *huffmanTree,char length,char code)
+{
+    if (huffmanTree->ch != -1)
+    {
+        huffmanTable[huffmanTree->ch].huffmanCode = code;
+        huffmanTable[huffmanTree->ch].length = length;
+        free(huffmanTree);
+        return 0;
+    }
+    generateHuffmanCode(huffmanTree->left,length + 1,code << 1);
+    generateHuffmanCode(huffmanTree->right,length + 1,(code << 1) + 1);
+    free(huffmanTree);
+    return 0;
 }
 
 void copySrcName(char* path, Record* block)
@@ -367,6 +428,8 @@ int tar(char* path, FILE* fout)
                 }
                 printOneBlock(block, fout);
             }
+
+            fclose(fin);
         }
     }
 
@@ -381,10 +444,45 @@ int untar()
 
 int huffman()
 {
+    for (int i = 0;i < 512; i++)
+    {
+        if (Frequency[i])
+        {
+            huffmanNode *tempHuffmanNode = (huffmanNode *)mallocAndReset(sizeof(huffmanNode),0);
+            tempHuffmanNode->ch = i;
+            linkNode *tempLinkNode = (linkNode *)mallocAndReset(sizeof(linkNode),0);
+            tempLinkNode->frequency = Frequency[i];
+            tempLinkNode->node = tempHuffmanNode;
+            addLinkNode(tempLinkNode);
+        }
+    }
+
+    while (linkNodeHead.frequency > 1)
+    {
+        linkNode *left = linkNodeHead.next;
+        linkNode *right = left->next;
+        linkNodeHead.next = right->next;
+        huffmanNode *tempHuffmanNode = (huffmanNode *)mallocAndReset(sizeof(huffmanNode),0);
+        tempHuffmanNode->ch = -1;
+        tempHuffmanNode->left = left->node;
+        tempHuffmanNode->right = right->node;
+        linkNode *tempLinkNode = (linkNode *)mallocAndReset(sizeof(linkNode),0);
+        tempLinkNode->frequency = left->frequency + right->frequency;
+        tempLinkNode->node = tempHuffmanNode;
+        free(left);
+        free(right);
+        linkNodeHead.frequency = linkNodeHead.frequency - 2;
+        addLinkNode(tempLinkNode);
+    }
+
+    generateHuffmanCode(linkNodeHead.next->node,0,0);
+    free(linkNodeHead.next);
+    linkNodeHead.next = NULL;
+
     return 0;
 }
 
-int compress()
+int compress(FILE *fin,FILE *fout)
 {
     return 0;
 }
@@ -397,6 +495,7 @@ int uncompress()
 int main()
 {
     memset(&iNodeHead, 0, sizeof(iNode));
+    memset(&linkNodeHead, 0, sizeof(linkNodeHead));
 
     char path[] = "/home/ricksanchez/test";
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
@@ -419,6 +518,8 @@ int main()
     fclose(fout);
 
     freeINode();
+
+    huffman();
 
     return 0;
 }
