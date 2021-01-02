@@ -2,12 +2,12 @@
 #include <pwd.h>
 #include <grp.h>
 #include <utime.h>
-#include <linux/kdev_t.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <linux/kdev_t.h>
 
 #define REGULAR      0
 #define NORMAL      '0'
