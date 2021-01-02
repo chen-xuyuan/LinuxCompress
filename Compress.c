@@ -64,21 +64,21 @@ typedef struct inode
 typedef struct huffmannode
 {
     int ch;
-    struct huffmannode *left;
-    struct huffmannode *right;
+    struct huffmannode* left;
+    struct huffmannode* right;
 } huffmanNode;
 
 typedef struct linknode
 {
     u_int64_t frequency;
-    huffmanNode *node;
-    struct linknode *next;
+    huffmanNode* node;
+    struct linknode* next;
 } linkNode;
 
 typedef struct huffmanitem
 {
     unsigned char length;
-    char *huffmanCode;
+    char* huffmanCode;
 } huffmanItem;
 
 iNode iNodeHead;
@@ -135,13 +135,13 @@ void freeINode()
     iNodeHead.inode = 0;
 }
 
-int addLinkNode(linkNode *tempNode)
+int addLinkNode(linkNode* tempNode)
 {
-    linkNode *pre= &linkNodeHead;
-    linkNode *p = pre->next;
-    for (int i = 0;i < linkNodeHead.frequency;i++)
+    linkNode* pre = &linkNodeHead;
+    linkNode* p = pre->next;
+    for (int i = 0; i < linkNodeHead.frequency; i++)
     {
-        if (tempNode->frequency<p->frequency)
+        if (tempNode->frequency < p->frequency)
         {
             pre->next = tempNode;
             tempNode->next = p;
@@ -157,7 +157,7 @@ int addLinkNode(linkNode *tempNode)
     return 0;
 }
 
-int generateHuffmanCode(huffmanNode *huffmanTree,unsigned char length,char* code)
+int generateHuffmanCode(huffmanNode* huffmanTree, unsigned char length, char* code)
 {
     if (huffmanTree->ch != -1)
     {
@@ -166,14 +166,14 @@ int generateHuffmanCode(huffmanNode *huffmanTree,unsigned char length,char* code
         free(huffmanTree);
         return 0;
     }
-    char *leftHuffmanCode = (char *)mallocAndReset(strlen(code) + 2,0);
-    char *rightHuffmanCode = (char *)mallocAndReset(strlen(code) + 2,0);
-    strcat(leftHuffmanCode,code);
-    strcat(leftHuffmanCode,"0");
-    strcat(rightHuffmanCode,code);
-    strcat(rightHuffmanCode,"1");
-    generateHuffmanCode(huffmanTree->left,length + 1,leftHuffmanCode);
-    generateHuffmanCode(huffmanTree->right,length + 1,rightHuffmanCode);
+    char* leftHuffmanCode = (char*)mallocAndReset(strlen(code) + 2, 0);
+    char* rightHuffmanCode = (char*)mallocAndReset(strlen(code) + 2, 0);
+    strcat(leftHuffmanCode, code);
+    strcat(leftHuffmanCode, "0");
+    strcat(rightHuffmanCode, code);
+    strcat(rightHuffmanCode, "1");
+    generateHuffmanCode(huffmanTree->left, length + 1, leftHuffmanCode);
+    generateHuffmanCode(huffmanTree->right, length + 1, rightHuffmanCode);
     free(huffmanTree);
     return 0;
 }
@@ -450,13 +450,13 @@ int untar()
 
 int huffman()
 {
-    for (int i = 0;i < 256; i++)
+    for (int i = 0; i < 256; i++)
     {
         if (Frequency[i])
         {
-            huffmanNode *tempHuffmanNode = (huffmanNode *)mallocAndReset(sizeof(huffmanNode),0);
+            huffmanNode* tempHuffmanNode = (huffmanNode*)mallocAndReset(sizeof(huffmanNode), 0);
             tempHuffmanNode->ch = i;
-            linkNode *tempLinkNode = (linkNode *)mallocAndReset(sizeof(linkNode),0);
+            linkNode* tempLinkNode = (linkNode*)mallocAndReset(sizeof(linkNode), 0);
             tempLinkNode->frequency = Frequency[i];
             tempLinkNode->node = tempHuffmanNode;
             addLinkNode(tempLinkNode);
@@ -465,14 +465,14 @@ int huffman()
 
     while (linkNodeHead.frequency > 1)
     {
-        linkNode *left = linkNodeHead.next;
-        linkNode *right = left->next;
+        linkNode* left = linkNodeHead.next;
+        linkNode* right = left->next;
         linkNodeHead.next = right->next;
-        huffmanNode *tempHuffmanNode = (huffmanNode *)mallocAndReset(sizeof(huffmanNode),0);
+        huffmanNode* tempHuffmanNode = (huffmanNode*)mallocAndReset(sizeof(huffmanNode), 0);
         tempHuffmanNode->ch = -1;
         tempHuffmanNode->left = left->node;
         tempHuffmanNode->right = right->node;
-        linkNode *tempLinkNode = (linkNode *)mallocAndReset(sizeof(linkNode),0);
+        linkNode* tempLinkNode = (linkNode*)mallocAndReset(sizeof(linkNode), 0);
         tempLinkNode->frequency = left->frequency + right->frequency;
         tempLinkNode->node = tempHuffmanNode;
         free(left);
@@ -489,56 +489,56 @@ int huffman()
     return 0;
 }
 
-int compress(FILE *fin,FILE *fout)
+int compress(FILE* fin, FILE* fout)
 {
-    generateHuffmanCode(linkNodeHead.node,0,"");
+    generateHuffmanCode(linkNodeHead.node, 0, "");
 
-    fprintf(fout,"%c",'\0');
-    for (int i = 0;i<256;i++)
+    fprintf(fout, "%c", '\0');
+    for (int i = 0; i < 256; i++)
     {
-        char *temp = (char *)&(Frequency[i]);
-        for (int j = 0;j<8;j++) fprintf(fout,"%c",temp[j]);
+        char* temp = (char*)&(Frequency[i]);
+        for (int j = 0; j < 8; j++) fprintf(fout, "%c", temp[j]);
     }
     int ch;
     char countLength = 0;
     unsigned char compressCode = 0;
     while ((ch = fgetc(fin)) != EOF)
     {
-        for (int i = 0; i < huffmanTable[ch].length;i++)
+        for (int i = 0; i < huffmanTable[ch].length; i++)
         {
             if (huffmanTable[ch].huffmanCode[i] == '0') compressCode = compressCode << 1;
             else compressCode = (compressCode << 1) + 1;
             countLength++;
             if (countLength == 8)
             {
-                fprintf(fout,"%c",compressCode);
+                fprintf(fout, "%c", compressCode);
                 countLength = 0;
                 compressCode = 0;
             }
         }
     }
-    fprintf(fout,"%c",compressCode << (8-countLength));
-    fseek(fout,0,SEEK_SET);
-    fprintf(fout,"%c",countLength);
+    fprintf(fout, "%c", compressCode << (8 - countLength));
+    fseek(fout, 0, SEEK_SET);
+    fprintf(fout, "%c", countLength);
     return 0;
 }
 
-int uncompress(FILE *fin,FILE *fout)
+int uncompress(FILE* fin, FILE* fout)
 {
     int lastLength = fgetc(fin);
     int ch;
-    for (int i=0;i<256;i++)
+    for (int i = 0; i < 256; i++)
     {
-        char *temp = (char *)&(Frequency[i]);
-        for (int j = 0;j<8;j++)
+        char* temp = (char*)&(Frequency[i]);
+        for (int j = 0; j < 8; j++)
         {
-            if((ch = fgetc(fin)) != EOF) temp[j] =ch;
+            if ((ch = fgetc(fin)) != EOF) temp[j] = ch;
             else
             {
                 perror("uncompress");
                 return 0;
             }
-            
+
         }
     }
     huffman();
@@ -549,25 +549,25 @@ int uncompress(FILE *fin,FILE *fout)
         perror("uncompress read");
         return 0;
     }
-    huffmanNode *p = linkNodeHead.node;
-    while((ch = fgetc(fin)) != EOF)
+    huffmanNode* p = linkNodeHead.node;
+    while ((ch = fgetc(fin)) != EOF)
     {
         int length = 8;
-        while(length)
+        while (length)
         {
             if (p->ch == -1)
             {
                 if (temp & 0x80) p = p->right;
                 else p = p->left;
-                length --;
+                length--;
                 temp = temp << 1;
             }
             else
             {
-                fprintf(fout,"%c",p->ch);
+                fprintf(fout, "%c", p->ch);
                 p = linkNodeHead.node;
             }
-            
+
         }
         temp = ch;
     }
@@ -577,16 +577,16 @@ int uncompress(FILE *fin,FILE *fout)
         {
             if (temp & 0x80) p = p->right;
             else p = p->left;
-            lastLength --;
+            lastLength--;
             temp = temp << 1;
         }
         else
         {
-            fprintf(fout,"%c",p->ch);
+            fprintf(fout, "%c", p->ch);
             p = linkNodeHead.node;
         }
     }
-    
+
     return 0;
 }
 
@@ -621,18 +621,18 @@ int main()
 
     huffman();
 
-    FILE *compressFin = fopen(tarPath,"rb");
-    FILE *compressFout = fopen(compressPath,"wb");
+    FILE* compressFin = fopen(tarPath, "rb");
+    FILE* compressFout = fopen(compressPath, "wb");
 
-    compress(compressFin,compressFout);
+    compress(compressFin, compressFout);
 
     fclose(compressFin);
     fclose(compressFout);
 
-    FILE *uncompressFin = fopen(compressPath,"rb");
-    FILE *uncompressFout = fopen(uncompressPath,"wb");
+    FILE* uncompressFin = fopen(compressPath, "rb");
+    FILE* uncompressFout = fopen(uncompressPath, "wb");
 
-    uncompress(uncompressFin,uncompressFout);
+    uncompress(uncompressFin, uncompressFout);
 
     fclose(uncompressFin);
     fclose(uncompressFout);
