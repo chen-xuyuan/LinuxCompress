@@ -77,8 +77,8 @@ typedef struct linknode
 
 typedef struct huffmanitem
 {
-    char length;
-    char huffmanCode;
+    unsigned char length;
+    char *huffmanCode;
 } huffmanItem;
 
 iNode iNodeHead;
@@ -157,7 +157,7 @@ int addLinkNode(linkNode *tempNode)
     return 0;
 }
 
-int generateHuffmanCode(huffmanNode *huffmanTree,char length,char code)
+int generateHuffmanCode(huffmanNode *huffmanTree,unsigned char length,char* code)
 {
     if (huffmanTree->ch != -1)
     {
@@ -166,8 +166,14 @@ int generateHuffmanCode(huffmanNode *huffmanTree,char length,char code)
         free(huffmanTree);
         return 0;
     }
-    generateHuffmanCode(huffmanTree->left,length + 1,code << 1);
-    generateHuffmanCode(huffmanTree->right,length + 1,(code << 1) + 1);
+    char *leftHuffmanCode = (char *)mallocAndReset(strlen(code) + 2,0);
+    char *rightHuffmanCode = (char *)mallocAndReset(strlen(code) + 2,0);
+    strcat(leftHuffmanCode,code);
+    strcat(leftHuffmanCode,"0");
+    strcat(rightHuffmanCode,code);
+    strcat(rightHuffmanCode,"1");
+    generateHuffmanCode(huffmanTree->left,length + 1,leftHuffmanCode);
+    generateHuffmanCode(huffmanTree->right,length + 1,rightHuffmanCode);
     free(huffmanTree);
     return 0;
 }
@@ -444,7 +450,7 @@ int untar()
 
 int huffman()
 {
-    for (int i = 0;i < 512; i++)
+    for (int i = 0;i < 256; i++)
     {
         if (Frequency[i])
         {
@@ -475,20 +481,112 @@ int huffman()
         addLinkNode(tempLinkNode);
     }
 
-    generateHuffmanCode(linkNodeHead.next->node,0,0);
+    linkNodeHead.node = linkNodeHead.next->node;
     free(linkNodeHead.next);
     linkNodeHead.next = NULL;
+    linkNodeHead.frequency = 0;
 
     return 0;
 }
 
 int compress(FILE *fin,FILE *fout)
 {
+    generateHuffmanCode(linkNodeHead.node,0,"");
+
+    fprintf(fout,"%c",'\0');
+    for (int i = 0;i<256;i++)
+    {
+        char *temp = (char *)&(Frequency[i]);
+        for (int j = 0;j<8;j++) fprintf(fout,"%c",temp[j]);
+    }
+    int ch;
+    char countLength = 0;
+    unsigned char compressCode = 0;
+    while ((ch = fgetc(fin)) != EOF)
+    {
+        for (int i = 0; i < huffmanTable[ch].length;i++)
+        {
+            if (huffmanTable[ch].huffmanCode[i] == '0') compressCode = compressCode << 1;
+            else compressCode = (compressCode << 1) + 1;
+            countLength++;
+            if (countLength == 8)
+            {
+                fprintf(fout,"%c",compressCode);
+                countLength = 0;
+                compressCode = 0;
+            }
+        }
+    }
+    fprintf(fout,"%c",compressCode << (8-countLength));
+    fseek(fout,0,SEEK_SET);
+    fprintf(fout,"%c",countLength);
     return 0;
 }
 
-int uncompress()
+int uncompress(FILE *fin,FILE *fout)
 {
+    int lastLength = fgetc(fin);
+    int ch;
+    for (int i=0;i<256;i++)
+    {
+        char *temp = (char *)&(Frequency[i]);
+        for (int j = 0;j<8;j++)
+        {
+            if((ch = fgetc(fin)) != EOF) temp[j] =ch;
+            else
+            {
+                perror("uncompress");
+                return 0;
+            }
+            
+        }
+    }
+    huffman();
+    char temp;
+    if ((ch = fgetc(fin)) != EOF) temp = ch;
+    else
+    {
+        perror("uncompress read");
+        return 0;
+    }
+    huffmanNode *p = linkNodeHead.node;
+    while((ch = fgetc(fin)) != EOF)
+    {
+        int length = 8;
+        while(length)
+        {
+            if (p->ch == -1)
+            {
+                if (temp & 0x80) p = p->right;
+                else p = p->left;
+                length --;
+                temp = temp << 1;
+            }
+            else
+            {
+                fprintf(fout,"%c",p->ch);
+                p = linkNodeHead.node;
+            }
+            
+        }
+        temp = ch;
+    }
+    while (lastLength > -1)
+    {
+        if (p->ch == -1)
+        {
+            if (temp & 0x80) p = p->right;
+            else p = p->left;
+            lastLength --;
+            temp = temp << 1;
+        }
+        else
+        {
+            fprintf(fout,"%c",p->ch);
+            p = linkNodeHead.node;
+        }
+    }
+    
     return 0;
 }
 
@@ -499,6 +597,8 @@ int main()
 
     char path[] = "/home/ricksanchez/test";
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
+    char compressPath[] = "/home/ricksanchez/tarTest/test.tar.hf";
+    char uncompressPath[] = "/home/ricksanchez/tarTest/testunhf.tar";
 
     if (path[strlen(path) - 1] == '/' && strlen(path) > 1) path[strlen(path) - 1] = '\0'; // if path end of '/' and path is not "/" or "."
 
@@ -520,6 +620,22 @@ int main()
     freeINode();
 
     huffman();
+
+    FILE *compressFin = fopen(tarPath,"rb");
+    FILE *compressFout = fopen(compressPath,"wb");
+
+    compress(compressFin,compressFout);
+
+    fclose(compressFin);
+    fclose(compressFout);
+
+    FILE *uncompressFin = fopen(compressPath,"rb");
+    FILE *uncompressFout = fopen(uncompressPath,"wb");
+
+    uncompress(uncompressFin,uncompressFout);
+
+    fclose(uncompressFin);
+    fclose(uncompressFout);
 
     return 0;
 }
