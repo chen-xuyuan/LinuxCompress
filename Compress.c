@@ -487,7 +487,7 @@ int huffman()
     return 0;
 }
 
-int freeHuffman(huffmanNode *node)
+int freeHuffman(huffmanNode* node)
 {
     if (node)
     {
@@ -502,7 +502,7 @@ int compress(FILE* fin, FILE* fout)
 {
     huffman();
 
-    char *huffmanCode = (char *)mallocAndReset(1,0);
+    char* huffmanCode = (char*)mallocAndReset(1, 0);
     if (generateHuffmanCode(linkNodeHead.node, 0, huffmanCode)) free(huffmanCode);
 
     fprintf(fout, "%c", '\0');
@@ -559,7 +559,7 @@ int uncompress(FILE* fin, FILE* fout)
     }
 
     huffman();
-    
+
     char temp;
     if ((ch = fgetc(fin)) != EOF) temp = ch;
     else
