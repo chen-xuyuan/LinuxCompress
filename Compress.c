@@ -2,6 +2,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <utime.h>
+#include <linux/kdev_t.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -339,6 +340,14 @@ int tar(char* path, FILE* fout)
     else if (S_ISLNK(statBuf.st_mode)) block->type = SYMLINK;
     else if (S_ISFIFO(statBuf.st_mode)) block->type = FIFO;
 
+    if (S_ISCHR(statBuf.st_mode) || S_ISBLK(statBuf.st_mode))
+    {
+        char *major = numberToNChar(MAJOR(statBuf.st_rdev),8);
+        char *minor = numberToNChar(MINOR(statBuf.st_rdev),8);
+        copyNByte(block->major,major,8);
+        copyNByte(block->minor,minor,8);
+    }
+
     copyNByte(block->ustar, "ustar  ", 8);
 
     struct passwd* userInfo = NULL;
@@ -456,7 +465,7 @@ int tar(char* path, FILE* fout)
 
         printOneBlock(block, fout);
 
-        if (!(S_ISLNK(statBuf.st_mode)) && !hardLinkPath)
+        if (S_ISREG(statBuf.st_mode) && !hardLinkPath)
         {
             int blockNumber = (statBuf.st_size + 511) / 512;
 
@@ -630,6 +639,36 @@ int untar(FILE* fin)
             continue;
         }
 
+        mode_t fileMode = (((tarHead->mode[3] - '0') * 8 + (tarHead->mode[4] - '0')) * 8 + (tarHead->mode[5] - '0')) * 8 + (tarHead->mode[6] - '0');
+
+        if (tarHead->type == FIFO)
+        {
+            if (mkfifo(srcPath,fileMode))
+            {
+                perror("mkfifo error");
+                if (linkPath) free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+            continue;
+        }
+
+        if (tarHead->type == BLOCK || tarHead->type == CHAR)
+        {
+            int  major = charToNumber(tarHead->major);
+            int minor = charToNumber(tarHead->minor);
+            if (mknod(srcPath,fileMode,MKDEV(major,minor)))
+            {
+                perror("mknod error");
+                if (linkPath) free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+            continue;
+        }
+
         FILE* fout = fopen(srcPath, "wb");
         if (!fout)
         {
@@ -662,7 +701,6 @@ int untar(FILE* fin)
 
         fclose(fout);
 
-        mode_t fileMode = (((tarHead->mode[3] - '0') * 8 + (tarHead->mode[4] - '0')) * 8 + (tarHead->mode[5] - '0')) * 8 + (tarHead->mode[6] - '0');
         chmod(srcPath, fileMode);
 
         u_int64_t uid = charToNumber(tarHead->uid);
@@ -854,7 +892,7 @@ int main()
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
     char untarPath[] = "/home/ricksanchez/tarTest/test.tar";
     char compressPath[] = "/home/ricksanchez/tarTest/test.tar.hf";
-    char uncompressPath[] = "/home/ricksanchez/tarTest/testunhf.tar";
+    char uncompressPath[] = "/home/ricksanchez/tarTest/unhftest.tar";
 
     if (path[strlen(path) - 1] == '/' && strlen(path) > 1) path[strlen(path) - 1] = '\0'; // if path end of '/' and path is not "/" or "."
 
