@@ -163,7 +163,6 @@ int generateHuffmanCode(huffmanNode* huffmanTree, unsigned char length, char* co
     {
         huffmanTable[huffmanTree->ch].huffmanCode = code;
         huffmanTable[huffmanTree->ch].length = length;
-        free(huffmanTree);
         return 0;
     }
     char* leftHuffmanCode = (char*)mallocAndReset(strlen(code) + 2, 0);
@@ -172,10 +171,9 @@ int generateHuffmanCode(huffmanNode* huffmanTree, unsigned char length, char* co
     strcat(leftHuffmanCode, "0");
     strcat(rightHuffmanCode, code);
     strcat(rightHuffmanCode, "1");
-    generateHuffmanCode(huffmanTree->left, length + 1, leftHuffmanCode);
-    generateHuffmanCode(huffmanTree->right, length + 1, rightHuffmanCode);
-    free(huffmanTree);
-    return 0;
+    if (generateHuffmanCode(huffmanTree->left, length + 1, leftHuffmanCode)) free(leftHuffmanCode);
+    if (generateHuffmanCode(huffmanTree->right, length + 1, rightHuffmanCode)) free(rightHuffmanCode);
+    return 1;
 }
 
 void copySrcName(char* path, Record* block)
@@ -489,9 +487,23 @@ int huffman()
     return 0;
 }
 
+int freeHuffman(huffmanNode *node)
+{
+    if (node)
+    {
+        freeHuffman(node->left);
+        freeHuffman(node->right);
+        free(node);
+    }
+    return 0;
+}
+
 int compress(FILE* fin, FILE* fout)
 {
-    generateHuffmanCode(linkNodeHead.node, 0, "");
+    huffman();
+
+    char *huffmanCode = (char *)mallocAndReset(1,0);
+    if (generateHuffmanCode(linkNodeHead.node, 0, huffmanCode)) free(huffmanCode);
 
     fprintf(fout, "%c", '\0');
     for (int i = 0; i < 256; i++)
@@ -520,6 +532,10 @@ int compress(FILE* fin, FILE* fout)
     fprintf(fout, "%c", compressCode << (8 - countLength));
     fseek(fout, 0, SEEK_SET);
     fprintf(fout, "%c", countLength);
+
+    freeHuffman(linkNodeHead.node);
+    linkNodeHead.node = NULL;
+
     return 0;
 }
 
@@ -541,7 +557,9 @@ int uncompress(FILE* fin, FILE* fout)
 
         }
     }
+
     huffman();
+    
     char temp;
     if ((ch = fgetc(fin)) != EOF) temp = ch;
     else
@@ -567,7 +585,6 @@ int uncompress(FILE* fin, FILE* fout)
                 fprintf(fout, "%c", p->ch);
                 p = linkNodeHead.node;
             }
-
         }
         temp = ch;
     }
@@ -586,6 +603,9 @@ int uncompress(FILE* fin, FILE* fout)
             p = linkNodeHead.node;
         }
     }
+
+    freeHuffman(linkNodeHead.node);
+    linkNodeHead.node = NULL;
 
     return 0;
 }
@@ -618,8 +638,6 @@ int main()
     fclose(fout);
 
     freeINode();
-
-    huffman();
 
     FILE* compressFin = fopen(tarPath, "rb");
     FILE* compressFout = fopen(compressPath, "wb");
