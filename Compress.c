@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include <pwd.h>
 #include <grp.h>
+#include <stdio.h>
 #include <utime.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -678,6 +678,7 @@ int untar(FILE* fin)
             free(tarHead);
             return 1;
         }
+
         u_int64_t fileSize = charToNumber(tarHead->size);
         int fileBlock = (fileSize + 511) / 512;
 
@@ -714,7 +715,6 @@ int untar(FILE* fin)
         time.modtime = mTime;
 
         utime(srcPath, &time);
-
     }
     return 0;
 }
