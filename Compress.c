@@ -342,10 +342,10 @@ int tar(char* path, FILE* fout)
 
     if (S_ISCHR(statBuf.st_mode) || S_ISBLK(statBuf.st_mode))
     {
-        char *major = numberToNChar(MAJOR(statBuf.st_rdev),8);
-        char *minor = numberToNChar(MINOR(statBuf.st_rdev),8);
-        copyNByte(block->major,major,8);
-        copyNByte(block->minor,minor,8);
+        char* major = numberToNChar(MAJOR(statBuf.st_rdev), 8);
+        char* minor = numberToNChar(MINOR(statBuf.st_rdev), 8);
+        copyNByte(block->major, major, 8);
+        copyNByte(block->minor, minor, 8);
     }
 
     copyNByte(block->ustar, "ustar  ", 8);
@@ -643,7 +643,7 @@ int untar(FILE* fin)
 
         if (tarHead->type == FIFO)
         {
-            if (mkfifo(srcPath,fileMode))
+            if (mkfifo(srcPath, fileMode))
             {
                 perror("mkfifo error");
                 if (linkPath) free(linkPath);
@@ -658,7 +658,7 @@ int untar(FILE* fin)
         {
             int  major = charToNumber(tarHead->major);
             int minor = charToNumber(tarHead->minor);
-            if (mknod(srcPath,fileMode,MKDEV(major,minor)))
+            if (mknod(srcPath, fileMode, MKDEV(major, minor)))
             {
                 perror("mknod error");
                 if (linkPath) free(linkPath);
