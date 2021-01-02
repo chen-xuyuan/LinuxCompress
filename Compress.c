@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <pwd.h>
 #include <grp.h>
+#include <utime.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -101,6 +102,30 @@ char* mallocAndReset(size_t length, int n)
     return p;
 }
 
+int createDir(char *path)
+{
+    int pathLength = strlen(path);
+    char *temp = (char *)mallocAndReset(pathLength + 1,0);
+    strcat(temp,path);
+    for (int i = 0; i < pathLength;i++)
+    {
+        if (temp[i] == '/')
+        {
+            temp[i] = '\0';
+            if (access(temp,F_OK))
+            {
+                if (mkdir(temp,0777))
+                {
+                    perror("mkdir error");
+                    return 1;
+                }
+            }
+            temp[i] = '/';
+        }
+    }
+    return 0;
+}
+
 void copyNByte(char* dest, char* src, int n)
 {
     for (int i = 0; i < n; i++) dest[i] = src[i];
@@ -186,7 +211,7 @@ void copyLinkName(char* path, Record* block)
     copyNByte(block->link_name, path, strlen(path) < 100 ? strlen(path) : 100);
 }
 
-char* numberToNChar(long number, int n)
+char* numberToNChar(u_int64_t number, int n)
 {
     char* temp = (char*)mallocAndReset(n, 0);
     int i = n - 2;
@@ -196,6 +221,14 @@ char* numberToNChar(long number, int n)
         number = number >> 3;
         i--;
     }
+    return temp;
+}
+
+u_int64_t charToNumber(char *octalString)
+{
+    u_int64_t temp = 0;
+    int length = strlen(octalString);
+    for (int i = 0;i<length;i++) temp = temp * 8 + (octalString[i] - '0');
     return temp;
 }
 
@@ -215,6 +248,22 @@ void printOneBlock(Record* block, FILE* fout)
         Frequency[p[i]]++;
         fprintf(fout, "%c", p[i]);
     }
+}
+
+Record *readOneBlock(FILE *fin)
+{
+    Record *block = (Record *)mallocAndReset(512,0);
+    int ch;
+    for (int i = 0;i < 512;i++)
+    {
+        if ((ch = fgetc(fin)) != EOF) ((char *)block)[i] = ch;
+        else
+        {
+            perror("readOneBlock error");
+            return 0;
+        }
+    }
+    return block;
 }
 
 int tarLongName(char* path, FILE* fout, char tarType)
@@ -441,8 +490,194 @@ int tar(char* path, FILE* fout)
     return 0;
 }
 
-int untar()
+int untar(FILE *fin)
 {
+    while (1)
+    {
+        Record *tarHead = readOneBlock(fin);
+        char *linkPath = NULL;
+        char *srcPath = NULL;
+
+        if (tarHead->name[0] == '\0') return 0;
+
+        if (tarHead->type == LINKLONG)
+        {
+            if (strcmp("././@LongLink",tarHead->name))
+            {
+                printf("tarHead linkName error\n");
+                free(tarHead);
+                return 1;
+            }
+            u_int64_t linkNameSize = charToNumber(tarHead->size);
+            int linkNameBlock = (linkNameSize + 511) / 512;
+            linkPath = (char *)mallocAndReset(linkNameSize,0);
+            int ch;
+            for (int i = 0;i<512 * linkNameBlock;i++)
+            {
+                if ((ch = fgetc(fin)) != EOF)
+                {
+                    if (i < linkNameSize) linkPath[i] = ch;
+                }
+                else
+                {
+                    perror("untar-linkName");
+                    free(linkPath);
+                    free(tarHead);
+                    return 1;
+                }
+            }
+            free(tarHead);
+            tarHead = readOneBlock(fin);
+        }
+
+        if (tarHead->type == LONGNAME)
+        {
+            if (strcmp("././@LongLink",tarHead->name))
+            {
+                printf("tarHead linkName error\n");
+                free(tarHead);
+                return 1;
+            }
+            u_int64_t srcNameSize = charToNumber(tarHead->size);
+            int srcNameBlock = (srcNameSize + 511) / 512;
+            srcPath = (char *)mallocAndReset(srcNameSize,0);
+            int ch;
+            for (int i = 0;i<512 * srcNameBlock;i++)
+            {
+                if ((ch = fgetc(fin)) != EOF)
+                {
+                    if (i < srcNameSize) srcPath[i] = ch;
+                }
+                else
+                {
+                    perror("untar-srcName");
+                    free(srcPath);
+                    free(tarHead);
+                    return 1;
+                }
+            }
+            free(tarHead);
+            tarHead = readOneBlock(fin);
+        }
+
+        if (srcPath)
+        {
+            if (strncmp(tarHead->name,srcPath,100))
+            {
+                printf("srcName bupipei\n");
+                free(srcPath);
+                if (linkPath) free(linkPath);
+                free(tarHead);
+                return 1;
+            }
+        }
+        else
+        {
+            srcPath = (char *)mallocAndReset(101,0);
+            copyNByte(srcPath,tarHead->name,100);
+        }
+    
+        if (linkPath)
+        {
+            if (strncmp(tarHead->link_name,linkPath,100))
+            {
+                printf("linkName bupipei\n");
+                free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+        }
+        else
+        {
+            linkPath = (char *)mallocAndReset(101,0);
+            copyNByte(linkPath,tarHead->link_name,100);
+        }
+
+        if (tarHead->type == DIRECTORY)
+        {
+            if (access(srcPath,F_OK)) createDir(srcPath);
+            continue;
+        }
+
+        createDir(srcPath);
+        remove(srcPath);
+
+        if (tarHead->type == SYMLINK)
+        {
+            if (symlink(linkPath,srcPath))
+            {
+                printf("%s\n",srcPath);
+                perror("symLink error");
+                free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+            continue;
+        }
+
+        if (tarHead->type == HARDLINK)
+        {
+            if (link(linkPath,srcPath))
+            {
+                perror("hardLink error");
+                free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+            continue;
+        }
+
+        FILE* fout = fopen(srcPath,"wb");
+        if (!fout)
+        {
+            perror("open file error");
+            if (linkPath) free(linkPath);
+            free(srcPath);
+            free(tarHead);
+            return 1;
+        }
+        u_int64_t fileSize = charToNumber(tarHead->size);
+        int fileBlock = (fileSize + 511) / 512;
+
+        for (u_int64_t i = 0;i < 512 * fileBlock;i++)
+        {
+            int ch;
+            if ((ch = fgetc(fin)) != EOF)
+            {
+                if (i < fileSize) fprintf(fout,"%c",ch);
+            }
+            else
+            {
+                perror("tar file shunhuai");
+                free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                return 1;
+            }
+            
+        }
+
+        fclose(fout);
+
+        mode_t fileMode = (((tarHead->mode[3] -'0') * 8 + (tarHead->mode[4] -'0')) * 8 + (tarHead->mode[5]-'0')) * 8 + (tarHead->mode[6]-'0');
+        chmod(srcPath,fileMode);
+
+        u_int64_t uid= charToNumber(tarHead->uid);
+        u_int64_t gid = charToNumber(tarHead->gid);
+
+        chown(srcPath,uid,gid);
+
+        u_int64_t mTime = charToNumber(tarHead->mtime);
+        struct utimbuf time;
+        time.actime = mTime;
+        time.modtime = mTime;
+
+        utime(srcPath,&time);
+
+    }
     return 0;
 }
 
@@ -617,6 +852,7 @@ int main()
 
     char path[] = "/home/ricksanchez/test";
     char tarPath[] = "/home/ricksanchez/tarTest/test.tar";
+    char untarPath[] = "/home/ricksanchez/tarTest/test.tar";
     char compressPath[] = "/home/ricksanchez/tarTest/test.tar.hf";
     char uncompressPath[] = "/home/ricksanchez/tarTest/testunhf.tar";
 
@@ -638,6 +874,10 @@ int main()
     fclose(fout);
 
     freeINode();
+
+    FILE *untarFin = fopen(untarPath,"rb");
+    untar(untarFin);
+    fclose(untarFin);
 
     FILE* compressFin = fopen(tarPath, "rb");
     FILE* compressFout = fopen(compressPath, "wb");
