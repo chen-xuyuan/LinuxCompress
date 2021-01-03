@@ -243,7 +243,7 @@ int calculateCheckSum(Record* block)
 
 void printOneBlock(Record* block, FILE* fout)
 {
-    char* p = (char*)block;
+    unsigned char* p = (char*)block;
     for (int i = 0; i < 512; i++)
     {
         Frequency[p[i]]++;
@@ -603,9 +603,16 @@ int untar(FILE* fin)
             copyNByte(linkPath, tarHead->link_name, 100);
         }
 
+        mode_t fileMode = (((tarHead->mode[3] - '0') * 8 + (tarHead->mode[4] - '0')) * 8 + (tarHead->mode[5] - '0')) * 8 + (tarHead->mode[6] - '0');
+
+        u_int64_t uid = charToNumber(tarHead->uid);
+        u_int64_t gid = charToNumber(tarHead->gid);
+
         if (tarHead->type == DIRECTORY)
         {
             if (access(srcPath, F_OK)) createDir(srcPath);
+            chmod(srcPath, fileMode);
+            chown(srcPath, uid, gid);
             continue;
         }
 
@@ -616,13 +623,14 @@ int untar(FILE* fin)
         {
             if (symlink(linkPath, srcPath))
             {
-                printf("%s\n", srcPath);
                 perror("symLink error");
                 free(linkPath);
                 free(srcPath);
                 free(tarHead);
                 return 1;
             }
+            chmod(srcPath, fileMode);
+            chown(srcPath, uid, gid);
             continue;
         }
 
@@ -636,10 +644,10 @@ int untar(FILE* fin)
                 free(tarHead);
                 return 1;
             }
+            chmod(srcPath, fileMode);
+            chown(srcPath, uid, gid);
             continue;
         }
-
-        mode_t fileMode = (((tarHead->mode[3] - '0') * 8 + (tarHead->mode[4] - '0')) * 8 + (tarHead->mode[5] - '0')) * 8 + (tarHead->mode[6] - '0');
 
         if (tarHead->type == FIFO)
         {
@@ -651,21 +659,28 @@ int untar(FILE* fin)
                 free(tarHead);
                 return 1;
             }
+            chmod(srcPath, fileMode);
+            chown(srcPath, uid, gid);
             continue;
         }
 
         if (tarHead->type == BLOCK || tarHead->type == CHAR)
         {
-            int  major = charToNumber(tarHead->major);
-            int minor = charToNumber(tarHead->minor);
-            if (mknod(srcPath, fileMode, MKDEV(major, minor)))
-            {
-                perror("mknod error");
-                if (linkPath) free(linkPath);
-                free(srcPath);
-                free(tarHead);
-                return 1;
-            }
+            char *sysCommand = (char *)mallocAndReset(11+strlen(srcPath) + strlen(tarHead->major) + strlen(tarHead->minor),0);
+            strcat(sysCommand,"mknod ");
+            strcat(sysCommand,srcPath);
+            strcat(sysCommand," ");
+            if (tarHead->type == BLOCK) strcat(sysCommand,"b ");
+            else strcat(sysCommand,"c ");
+            strcat(sysCommand,tarHead->major);
+            strcat(sysCommand," ");
+            strcat(sysCommand,tarHead->minor);
+            system(sysCommand);
+            chmod(srcPath, fileMode);
+            chown(srcPath, uid, gid);
+            if (linkPath) free(linkPath);
+            free(srcPath);
+            free(tarHead);
             continue;
         }
 
@@ -703,9 +718,6 @@ int untar(FILE* fin)
         fclose(fout);
 
         chmod(srcPath, fileMode);
-
-        u_int64_t uid = charToNumber(tarHead->uid);
-        u_int64_t gid = charToNumber(tarHead->gid);
 
         chown(srcPath, uid, gid);
 
