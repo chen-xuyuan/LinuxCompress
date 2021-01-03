@@ -666,21 +666,21 @@ int untar(FILE* fin)
 
         if (tarHead->type == BLOCK || tarHead->type == CHAR)
         {
-            char *sysCommand = (char *)mallocAndReset(11+strlen(srcPath) + strlen(tarHead->major) + strlen(tarHead->minor),0);
-            strcat(sysCommand,"mknod ");
-            strcat(sysCommand,srcPath);
-            strcat(sysCommand," ");
-            if (tarHead->type == BLOCK) strcat(sysCommand,"b ");
-            else strcat(sysCommand,"c ");
-            strcat(sysCommand,tarHead->major);
-            strcat(sysCommand," ");
-            strcat(sysCommand,tarHead->minor);
-            system(sysCommand);
+            int major = charToNumber(tarHead->major);
+            int minor = charToNumber(tarHead->minor);
+            mode_t deviceMode;
+            if (tarHead->type == BLOCK) deviceMode = S_IFBLK;
+            else deviceMode = S_IFCHR;
+            if (mknod(srcPath, deviceMode, MKDEV(major, minor)))
+            {
+                perror("mknod error");
+                if (linkPath) free(linkPath);
+                free(srcPath);
+                free(tarHead);
+                continue;
+            }
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
-            if (linkPath) free(linkPath);
-            free(srcPath);
-            free(tarHead);
             continue;
         }
 
