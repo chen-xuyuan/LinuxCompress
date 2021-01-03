@@ -499,6 +499,14 @@ int tar(char* path, FILE* fout)
     return 0;
 }
 
+int freeSpace(char *srcPath,char *linkPath,Record *block)
+{
+    if (srcPath) free(srcPath);
+    if (linkPath) free(linkPath);
+    if (block) free(block);
+    return 0;
+}
+
 int untar(FILE* fin)
 {
     while (1)
@@ -514,7 +522,7 @@ int untar(FILE* fin)
             if (strcmp("././@LongLink", tarHead->name))
             {
                 printf("tarHead linkName error\n");
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
             u_int64_t linkNameSize = charToNumber(tarHead->size);
@@ -530,8 +538,7 @@ int untar(FILE* fin)
                 else
                 {
                     perror("untar-linkName");
-                    free(linkPath);
-                    free(tarHead);
+                    freeSpace(srcPath,linkPath,tarHead);
                     return 1;
                 }
             }
@@ -544,7 +551,7 @@ int untar(FILE* fin)
             if (strcmp("././@LongLink", tarHead->name))
             {
                 printf("tarHead linkName error\n");
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
             u_int64_t srcNameSize = charToNumber(tarHead->size);
@@ -560,8 +567,7 @@ int untar(FILE* fin)
                 else
                 {
                     perror("untar-srcName");
-                    free(srcPath);
-                    free(tarHead);
+                    freeSpace(srcPath,linkPath,tarHead);
                     return 1;
                 }
             }
@@ -574,9 +580,7 @@ int untar(FILE* fin)
             if (strncmp(tarHead->name, srcPath, 100))
             {
                 printf("srcName bupipei\n");
-                free(srcPath);
-                if (linkPath) free(linkPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
         }
@@ -591,9 +595,7 @@ int untar(FILE* fin)
             if (strncmp(tarHead->link_name, linkPath, 100))
             {
                 printf("linkName bupipei\n");
-                free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
         }
@@ -613,6 +615,7 @@ int untar(FILE* fin)
             if (access(srcPath, F_OK)) createDir(srcPath);
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
+            freeSpace(srcPath,linkPath,tarHead);
             continue;
         }
 
@@ -624,13 +627,12 @@ int untar(FILE* fin)
             if (symlink(linkPath, srcPath))
             {
                 perror("symLink error");
-                free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
+            freeSpace(srcPath,linkPath,tarHead);
             continue;
         }
 
@@ -639,13 +641,12 @@ int untar(FILE* fin)
             if (link(linkPath, srcPath))
             {
                 perror("hardLink error");
-                free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
+            freeSpace(srcPath,linkPath,tarHead);
             continue;
         }
 
@@ -654,13 +655,12 @@ int untar(FILE* fin)
             if (mkfifo(srcPath, fileMode))
             {
                 perror("mkfifo error");
-                if (linkPath) free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
+            freeSpace(srcPath,linkPath,tarHead);
             continue;
         }
 
@@ -674,13 +674,12 @@ int untar(FILE* fin)
             if (mknod(srcPath, deviceMode, MKDEV(major, minor)))
             {
                 perror("mknod error");
-                if (linkPath) free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 continue;
             }
             chmod(srcPath, fileMode);
             chown(srcPath, uid, gid);
+            freeSpace(srcPath,linkPath,tarHead);
             continue;
         }
 
@@ -688,9 +687,7 @@ int untar(FILE* fin)
         if (!fout)
         {
             perror("open file error");
-            if (linkPath) free(linkPath);
-            free(srcPath);
-            free(tarHead);
+            freeSpace(srcPath,linkPath,tarHead);
             return 1;
         }
 
@@ -707,9 +704,7 @@ int untar(FILE* fin)
             else
             {
                 perror("tar file shunhuai");
-                free(linkPath);
-                free(srcPath);
-                free(tarHead);
+                freeSpace(srcPath,linkPath,tarHead);
                 return 1;
             }
 
@@ -727,6 +722,8 @@ int untar(FILE* fin)
         time.modtime = mTime;
 
         utime(srcPath, &time);
+
+        freeSpace(srcPath,linkPath,tarHead);
     }
     return 0;
 }
